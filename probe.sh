@@ -93,77 +93,96 @@ EOJSON
 # 3. Execution mode — on-node kata vs peer pod
 # ---------------------------------------------------------------------------
 probe_execution_mode() {
-    local mode="unknown" cloud_provider="none"
-    local gcp_machine_type="" gcp_zone="" gcp_instance_id="" gcp_project=""
+    local mode="" cloud_provider="none"
+    local gcp_machine_type="" gcp_zone="" gcp_instance_id="" gcp_project="" gcp_instance_name=""
     local aws_instance_type="" aws_az="" aws_instance_id=""
     local azure_vm_size="" azure_location="" azure_vm_id=""
 
-    # GCP metadata
-    local gcp_ok="false" gcp_instance_name=""
-    gcp_machine_type="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
-        http://metadata.google.internal/computeMetadata/v1/instance/machine-type 2>/dev/null || echo "")"
-    if [ -n "$gcp_machine_type" ]; then
-        gcp_ok="true"
-        cloud_provider="gcp"
-        mode="peer-pod"
-        # extract short machine type (last path segment)
-        gcp_machine_type="${gcp_machine_type##*/}"
-        gcp_zone="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
-            http://metadata.google.internal/computeMetadata/v1/instance/zone 2>/dev/null || echo "")"
-        gcp_zone="${gcp_zone##*/}"
-        gcp_instance_id="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
-            http://metadata.google.internal/computeMetadata/v1/instance/id 2>/dev/null || echo "")"
-        gcp_instance_name="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
-            http://metadata.google.internal/computeMetadata/v1/instance/name 2>/dev/null || echo "")"
-        gcp_project="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
-            http://metadata.google.internal/computeMetadata/v1/project/project-id 2>/dev/null || echo "")"
+    # Authoritative signal: the pod's runtimeClassName, injected as RUNTIME_CLASS.
+    # Prefer it over cloud-metadata heuristics — an on-node kata microVM running on
+    # a cloud worker reaches the *node's* metadata service exactly like a peer pod
+    # does, so metadata alone misclassifies on-node kata as a peer pod.
+    local rc_lc
+    rc_lc="$(printf '%s' "${RUNTIME_CLASS:-}" | tr '[:upper:]' '[:lower:]')"
+    case "$rc_lc" in
+        *remote*|*peer*) mode="peer-pod" ;;
+        kata*)           mode="on-node" ;;
+        standard|runc)   mode="standard" ;;
+    esac
+
+    # Pod-VM cloud metadata. Gather it for a confirmed peer pod (to fill in the
+    # instance details), or when the runtime class was not injected (as a fallback
+    # signal). For a confirmed on-node/standard workload the reachable metadata
+    # belongs to the host node — not a dedicated pod VM — so we skip it to avoid
+    # conflating the two in the comparison.
+    if [ "$mode" = "peer-pod" ] || [ -z "$mode" ]; then
+        # GCP metadata
+        gcp_machine_type="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
+            http://metadata.google.internal/computeMetadata/v1/instance/machine-type 2>/dev/null || echo "")"
+        if [ -n "$gcp_machine_type" ]; then
+            cloud_provider="gcp"
+            mode="peer-pod"
+            # extract short machine type (last path segment)
+            gcp_machine_type="${gcp_machine_type##*/}"
+            gcp_zone="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
+                http://metadata.google.internal/computeMetadata/v1/instance/zone 2>/dev/null || echo "")"
+            gcp_zone="${gcp_zone##*/}"
+            gcp_instance_id="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
+                http://metadata.google.internal/computeMetadata/v1/instance/id 2>/dev/null || echo "")"
+            gcp_instance_name="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
+                http://metadata.google.internal/computeMetadata/v1/instance/name 2>/dev/null || echo "")"
+            gcp_project="$(curl -sf -m 2 -H 'Metadata-Flavor: Google' \
+                http://metadata.google.internal/computeMetadata/v1/project/project-id 2>/dev/null || echo "")"
+        fi
+
+        # AWS metadata (IMDSv2)
+        if [ "$cloud_provider" = "none" ]; then
+            local aws_token
+            aws_token="$(curl -sf -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+                http://169.254.169.254/latest/api/token 2>/dev/null || echo "")"
+            if [ -n "$aws_token" ]; then
+                aws_instance_type="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: $aws_token" \
+                    http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "")"
+            else
+                aws_instance_type="$(curl -sf -m 2 \
+                    http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "")"
+            fi
+            if [ -n "$aws_instance_type" ]; then
+                cloud_provider="aws"
+                mode="peer-pod"
+                aws_az="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: ${aws_token}" \
+                    http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null || echo "")"
+                aws_instance_id="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: ${aws_token}" \
+                    http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "")"
+            fi
+        fi
+
+        # Azure metadata
+        if [ "$cloud_provider" = "none" ]; then
+            local azure_json
+            azure_json="$(curl -sf -m 2 -H 'Metadata: true' \
+                'http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01' 2>/dev/null || echo "")"
+            if [ -n "$azure_json" ] && echo "$azure_json" | grep -q '"vmSize"'; then
+                cloud_provider="azure"
+                mode="peer-pod"
+                azure_vm_size="$(echo "$azure_json" | grep -o '"vmSize":"[^"]*"' | head -1 | cut -d'"' -f4)"
+                azure_location="$(echo "$azure_json" | grep -o '"location":"[^"]*"' | head -1 | cut -d'"' -f4)"
+                azure_vm_id="$(echo "$azure_json" | grep -o '"vmId":"[^"]*"' | head -1 | cut -d'"' -f4)"
+            fi
+        fi
     fi
 
-    # AWS metadata (IMDSv2)
-    if [ "$cloud_provider" = "none" ]; then
-        local aws_token
-        aws_token="$(curl -sf -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
-            http://169.254.169.254/latest/api/token 2>/dev/null || echo "")"
-        if [ -n "$aws_token" ]; then
-            aws_instance_type="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: $aws_token" \
-                http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "")"
+    # Fallback when the runtime class was not injected and no cloud metadata
+    # answered: use the hypervisor flag to separate on-node kata from a plain
+    # standard container.
+    if [ -z "$mode" ]; then
+        local in_vm="false"
+        grep -qw hypervisor /proc/cpuinfo 2>/dev/null && in_vm="true"
+        if [ "$in_vm" = "true" ]; then
+            mode="on-node"
         else
-            aws_instance_type="$(curl -sf -m 2 \
-                http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "")"
+            mode="standard"
         fi
-        if [ -n "$aws_instance_type" ]; then
-            cloud_provider="aws"
-            mode="peer-pod"
-            aws_az="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: ${aws_token}" \
-                http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null || echo "")"
-            aws_instance_id="$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: ${aws_token}" \
-                http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "")"
-        fi
-    fi
-
-    # Azure metadata
-    if [ "$cloud_provider" = "none" ]; then
-        local azure_json
-        azure_json="$(curl -sf -m 2 -H 'Metadata: true' \
-            'http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01' 2>/dev/null || echo "")"
-        if [ -n "$azure_json" ] && echo "$azure_json" | grep -q '"vmSize"'; then
-            cloud_provider="azure"
-            mode="peer-pod"
-            azure_vm_size="$(echo "$azure_json" | grep -o '"vmSize":"[^"]*"' | head -1 | cut -d'"' -f4)"
-            azure_location="$(echo "$azure_json" | grep -o '"location":"[^"]*"' | head -1 | cut -d'"' -f4)"
-            azure_vm_id="$(echo "$azure_json" | grep -o '"vmId":"[^"]*"' | head -1 | cut -d'"' -f4)"
-        fi
-    fi
-
-    # If we're in a VM but no cloud metadata → on-node kata
-    local in_vm="false"
-    grep -qw hypervisor /proc/cpuinfo 2>/dev/null && in_vm="true"
-    if [ "$in_vm" = "true" ] && [ "$mode" = "unknown" ]; then
-        mode="on-node"
-    fi
-    # Not in a VM at all → standard container
-    if [ "$in_vm" = "false" ] && [ "$mode" = "unknown" ]; then
-        mode="standard"
     fi
 
     cat <<EOJSON
@@ -440,7 +459,7 @@ EOJSON
 # ---------------------------------------------------------------------------
 echo "{"
 echo "  \"probeTimestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-echo "  \"probeVersion\": \"2.0.0\","
+echo "  \"probeVersion\": \"2.0.1\","
 probe_identity
 echo ","
 probe_runtime
