@@ -296,6 +296,10 @@ EOJSON
 # 5. GPU TEE — NVIDIA confidential computing
 # ---------------------------------------------------------------------------
 probe_gpu() {
+    # GPU detection touches optional /proc, /dev globs and nvidia-smi; none of it
+    # must ever abort the probe (e.g. an unmatched /dev/nvidia* glob under
+    # `set -e -o pipefail`). Relax both for the detection, restore before return.
+    set +e +o pipefail
     local present="false" vendor="" count=0 model="" driver=""
     local cc_mode="unknown" cc_evidence=""
     local dev_nvidia0="false" dev_nvidiactl="false" dev_uvm="false" dev_caps="false"
@@ -358,6 +362,7 @@ probe_gpu() {
     }
   }
 EOJSON
+    set -e -o pipefail
 }
 
 # ---------------------------------------------------------------------------
