@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: workload-inspector
+  namespace: workload-inspector
+  labels:
+    app: workload-inspector
+spec:
+  selector:
+    app: workload-inspector
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http

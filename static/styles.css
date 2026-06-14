@@ -1,0 +1,145 @@
+:root {
+    --bg: #0c0e14;
+    --surface: #151821;
+    --surface-hover: #1c2030;
+    --border: #252a3a;
+    --text: #e2e4eb;
+    --text-dim: #8b8fa3;
+    --accent: #6e9fff;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --radius: 10px;
+    --font: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--font);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    background: var(--surface);
+}
+.header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+.logo { font-size: 20px; }
+.timestamp { color: var(--text-dim); font-size: 12px; }
+
+main {
+    max-width: 1200px;
+    margin: 24px auto;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.card-header {
+    padding: 14px 18px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
+.card-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+}
+.card-body { padding: 14px 18px 18px; }
+
+.badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.badge-green  { background: rgba(52,211,153,.15); color: var(--green); }
+.badge-red    { background: rgba(248,113,113,.15); color: var(--red); }
+.badge-amber  { background: rgba(251,191,36,.15); color: var(--amber); }
+.badge-cyan   { background: rgba(34,211,238,.15); color: var(--cyan); }
+.badge-purple { background: rgba(167,139,250,.15); color: var(--purple); }
+
+.field { display: flex; justify-content: space-between; padding: 5px 0; }
+.field + .field { border-top: 1px solid rgba(255,255,255,.04); }
+.field-label { color: var(--text-dim); flex-shrink: 0; margin-right: 12px; }
+.field-value { text-align: right; word-break: break-all; color: var(--text); }
+.field-value.mono { font-size: 12px; }
+.field-value.highlight { color: var(--accent); }
+.field-value.success { color: var(--green); }
+.field-value.danger { color: var(--red); }
+.field-value.warn { color: var(--amber); }
+
+.section-note {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(110,159,255,.06);
+    border: 1px solid rgba(110,159,255,.12);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 24px;
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+.error-banner {
+    grid-column: 1 / -1;
+    padding: 16px 20px;
+    background: rgba(248,113,113,.08);
+    border: 1px solid rgba(248,113,113,.2);
+    border-radius: var(--radius);
+    color: var(--red);
+}
+
+.card.wide { grid-column: 1 / -1; }
+
+footer {
+    max-width: 1200px;
+    margin: 32px auto 24px;
+    padding: 0 24px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+@media (max-width: 740px) {
+    main { grid-template-columns: 1fr; }
+    .card.wide { grid-column: 1; }
+}

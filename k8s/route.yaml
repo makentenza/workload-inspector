@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: workload-inspector
+  namespace: workload-inspector
+  labels:
+    app: workload-inspector
+spec:
+  to:
+    kind: Service
+    name: workload-inspector
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

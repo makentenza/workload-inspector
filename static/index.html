@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Workload Inspector</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <h1><span class="logo">&#x1f50d;</span> Workload Inspector</h1>
+            <span id="timestamp" class="timestamp"></span>
+        </div>
+    </header>
+    <main id="dashboard">
+        <div class="loading">Probing environment&hellip;</div>
+    </main>
+    <footer>
+        <span>workload-inspector v1.0.0</span>
+        <span id="probe-version"></span>
+    </footer>
+    <script src="app.js"></script>
+</body>
+</html>
