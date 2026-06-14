@@ -8,6 +8,7 @@ metadata:
 spec:
   selector:
     app: workload-inspector
+    wi-role: dashboard
   ports:
   - port: 8080
     targetPort: 8080

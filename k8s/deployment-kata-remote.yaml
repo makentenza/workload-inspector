@@ -17,6 +17,8 @@ spec:
       labels:
         app: workload-inspector
         variant: kata-remote
+        wi-role: probe
+        wi-variant: kata-remote
       annotations:
         io.katacontainers.config.hypervisor.machine_type: e2-small
     spec:

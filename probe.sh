@@ -293,7 +293,75 @@ EOJSON
 }
 
 # ---------------------------------------------------------------------------
-# 5. Attestation
+# 5. GPU TEE — NVIDIA confidential computing
+# ---------------------------------------------------------------------------
+probe_gpu() {
+    local present="false" vendor="" count=0 model="" driver=""
+    local cc_mode="unknown" cc_evidence=""
+    local dev_nvidia0="false" dev_nvidiactl="false" dev_uvm="false" dev_caps="false"
+
+    # NVIDIA kernel driver
+    if [ -f /proc/driver/nvidia/version ]; then
+        present="true"; vendor="NVIDIA"
+        driver="$(grep -oE 'Kernel Module +[0-9][0-9.]+' /proc/driver/nvidia/version 2>/dev/null \
+            | grep -oE '[0-9][0-9.]+' | head -1)"
+    fi
+
+    # GPU device nodes
+    [ -e /dev/nvidia0 ]       && { dev_nvidia0="true"; present="true"; vendor="NVIDIA"; }
+    [ -e /dev/nvidiactl ]     && dev_nvidiactl="true"
+    [ -e /dev/nvidia-uvm ]    && dev_uvm="true"
+    [ -e /dev/nvidia-caps ]   && dev_caps="true"
+
+    # Count + model from /proc
+    if [ -d /proc/driver/nvidia/gpus ]; then
+        count="$(ls -1 /proc/driver/nvidia/gpus 2>/dev/null | wc -l | tr -d ' ')"
+        local g
+        g="$(ls -1 /proc/driver/nvidia/gpus 2>/dev/null | head -1)"
+        if [ -n "$g" ] && [ -f "/proc/driver/nvidia/gpus/$g/information" ]; then
+            model="$(grep -i '^Model:' "/proc/driver/nvidia/gpus/$g/information" 2>/dev/null \
+                | cut -d: -f2- | xargs)"
+        fi
+    fi
+    [ "$count" = "0" ] && count="$(ls -1 /dev/nvidia[0-9]* 2>/dev/null | wc -l | tr -d ' ')"
+
+    # Confidential Compute mode — best effort via nvidia-smi if present
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        local cc_out
+        cc_out="$(nvidia-smi conf-compute -f 2>/dev/null | tr -d '\r' || echo "")"
+        if echo "$cc_out" | grep -qiE 'status:[[:space:]]*(ON|ENABLED|DEVTOOLS)'; then
+            cc_mode="on"; cc_evidence="nvidia-smi conf-compute: $(echo "$cc_out" | head -1 | xargs)"
+        elif echo "$cc_out" | grep -qiE 'status:[[:space:]]*(OFF|DISABLED)'; then
+            cc_mode="off"; cc_evidence="nvidia-smi conf-compute: off"
+        fi
+        [ -z "$model" ] && model="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs)"
+    fi
+    # CC capability device present but nvidia-smi unavailable to confirm status
+    if [ "$cc_mode" = "unknown" ] && [ "$dev_caps" = "true" ]; then
+        cc_evidence="/dev/nvidia-caps present (CC capability device); install nvidia-smi to confirm CC status"
+    fi
+
+    cat <<EOJSON
+  "gpu": {
+    "present": $present,
+    "vendor": "$(json_escape "$vendor")",
+    "count": ${count:-0},
+    "model": "$(json_escape "$model")",
+    "driverVersion": "$(json_escape "$driver")",
+    "ccMode": "$(json_escape "$cc_mode")",
+    "ccEvidence": "$(json_escape "$cc_evidence")",
+    "devices": {
+      "nvidia0": $dev_nvidia0,
+      "nvidiactl": $dev_nvidiactl,
+      "nvidiaUvm": $dev_uvm,
+      "nvidiaCaps": $dev_caps
+    }
+  }
+EOJSON
+}
+
+# ---------------------------------------------------------------------------
+# 6. Attestation
 # ---------------------------------------------------------------------------
 probe_attestation() {
     local aa_detected="false" aa_kbc_params="" kbs_url="" kbc_type=""
@@ -367,7 +435,7 @@ EOJSON
 # ---------------------------------------------------------------------------
 echo "{"
 echo "  \"probeTimestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-echo "  \"probeVersion\": \"1.0.0\","
+echo "  \"probeVersion\": \"2.0.0\","
 probe_identity
 echo ","
 probe_runtime
@@ -375,6 +443,8 @@ echo ","
 probe_execution_mode
 echo ","
 probe_tee
+echo ","
+probe_gpu
 echo ","
 probe_attestation
 echo "}"

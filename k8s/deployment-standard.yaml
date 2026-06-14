@@ -17,6 +17,8 @@ spec:
       labels:
         app: workload-inspector
         variant: standard
+        wi-role: probe
+        wi-variant: standard
     spec:
       serviceAccountName: default
       containers:

@@ -17,6 +17,8 @@ spec:
       labels:
         app: workload-inspector
         variant: kata
+        wi-role: probe
+        wi-variant: kata
     spec:
       runtimeClassName: kata
       serviceAccountName: default
